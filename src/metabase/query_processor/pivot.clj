@@ -26,5 +26,5 @@
                ;;TODO: `pivot-grouping` is not "magic" enough to mark it as an internal thing
                (assoc-in [:query :fields] [[:expression "pivot-grouping"]])
                ;;TODO: replace this value with a bitmask or something to indicate the source better
-               (assoc-in [:query :expressions] {"pivot-grouping" [:ltrim (str (vec breakout))]}))) 
+               (assoc-in [:query :expressions] {"pivot-grouping" [:ltrim (str (vec breakout))]})))
          breakouts)))

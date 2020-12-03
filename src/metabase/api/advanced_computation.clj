@@ -1,7 +1,6 @@
 (ns metabase.api.advanced-computation
   "/api/advanced_computation endpoints, like pivot table generation"
-  (:require [clojure.tools.logging :as log]
-            [compojure.core :refer [POST]]
+  (:require [compojure.core :refer [POST]]
             [metabase.api.common :as api]
             [metabase.models.database :as database :refer [Database]]
             [metabase.query-processor :as qp]
@@ -35,21 +34,32 @@
   ;;            }
   ;;     :row_count <a total count from the rows collection above
   ;;     :status :completed}
-  
+
   (qp.store/with-store
     (let [main-breakout           (:breakout (:query query))
-          all-queries             (pivot/generate-queries query)
           col-determination-query (-> query
                                       ;; TODO: move this to a bitmask or something that scales better / easier to use
                                       (assoc-in [:query :expressions] {"pivot-grouping" [:ltrim (str (vec main-breakout))]})
                                       (assoc-in [:query :fields] [[:expression "pivot-grouping"]]))
-          all-expected-cols       (log/spy :error (qp/query->expected-cols (qp/query->preprocessed col-determination-query)))]
-      ;; {:data {:native_form      nil
-      ;;         :cols             all-expected-cols
-      ;;         :results_metadata all-expected-cols
-      ;;         }}
-      (for [pivot-query (pivot/generate-queries query)]
-        (qp/process-query pivot-query)))))
-
+          main-query              (qp/query->preprocessed query)
+          all-expected-cols       (qp/query->expected-cols (qp/query->preprocessed col-determination-query))]
+      {:database_id (:database_id main-query)
+       :data        {:native_form      nil
+                     :cols             all-expected-cols
+                     :results_metadata all-expected-cols
+                     :rows             (mapcat identity (for [pivot-query (pivot/generate-queries query)
+                                                              :let        [query-result (qp/process-query pivot-query)
+                                                                           result-cols (map-indexed vector (:cols (:data query-result)))
+                                                                           column-mapping (map (fn [item]
+                                                                                                 (some #(when (= (:name item) (:name (second %)))
+                                                                                                          (first %)) result-cols))
+                                                                                               all-expected-cols)
+                                                                           rows (:rows (:data query-result))]]
+                                                          (map (fn [row]
+                                                                 (map (fn [mapping]
+                                                                        (if mapping
+                                                                          (nth row mapping)
+                                                                          nil))
+                                                                      column-mapping)) rows)))}})))
 
 (api/define-routes)
